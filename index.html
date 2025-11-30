@@ -1,0 +1,855 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sistema de Gerenciamento de Plantões</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+  :root{
+    --accent:#0f4f86; --muted:#607088; --card:#ffffff; --bg:#f3f6f9;
+    --glass: rgba(15,23,42,0.04);
+  }
+  html,body{height:100%; font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial; background:var(--bg); color:#0f1724;}
+  .card{background:var(--card); border-radius:12px; box-shadow:0 8px 26px rgba(15,23,42,0.06); border:1px solid var(--glass); padding:20px;}
+  .muted{color:var(--muted); font-size:13px;}
+  .h1{color:var(--accent); font-weight:600;}
+  input,select,textarea{border:1px solid #e6eef7; border-radius:8px; padding:10px 12px; font-size:14px; outline:none;}
+  input:focus, select:focus, textarea:focus{box-shadow:0 0 0 4px rgba(15,79,134,0.06); border-color:rgba(15,79,134,0.6);} 
+  .btn{border-radius:10px; padding:8px 12px; font-weight:600; font-size:14px; cursor:pointer;}
+  .btn-primary{background:linear-gradient(180deg,#0b61a1,#0f4f86); color:white; border:none;}
+  .btn-ghost{background:white; border:1px solid #e6eef7; color:#0f1724;}
+  .btn-danger{background:#fff5f5; color:#c53030; border:1px solid rgba(205,65,65,0.06);}
+ table{width:100%; border-collapse:collapse; font-size:13px;}
+  thead th{background:linear-gradient(90deg,#eef6ff,#f6fbff); color:#063a73; font-weight:700; font-size:12px; text-align:left; padding:10px;}
+  tbody td{padding:10px; border-top:1px solid #f1f5f9; vertical-align:top;}
+  tbody tr:nth-child(odd){background:#fbfdff;}
+  .small{font-size:13px; color:var(--muted);}
+  .tag{background:#eef6ff;color:var(--accent);padding:6px 10px;border-radius:999px;font-size:12px;}
+  .card-compact{padding:14px;}
+  .input-date{padding:8px 10px;}
+  @media (max-width:820px){ .grid-4{grid-template-columns:1fr; } .grid-3{grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+
+<header class="fixed inset-x-0 top-0 bg-white/80 backdrop-blur-sm border-b" style="border-color:var(--glass);">
+  <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+    <div>
+      <div class="h1 text-lg">Sistema de Gerenciamento de Plantões</div>
+    </div>
+    <div class="flex items-center gap-2">
+      <label class="muted text-sm">Mês/Ano</label>
+      <input id="filtroMesTopo" type="month" class="input-date"/>
+      <button id="btnTodosMeses" class="btn btn-ghost">Todos</button>
+      <button id="btnImport" class="btn btn-ghost">Importar XLSX</button>
+      <button id="btnExport" class="btn btn-primary">Exportar XLSX</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-6 pb-16" style="padding-top:96px;">
+  <!-- Servidores (layout agrupado, sem Importar CSV) -->
+  <section class="card mb-6">
+    <div class="flex items-start justify-between">
+      <div>
+        <h2 class="text-lg font-semibold">Servidores</h2>
+        <div class="muted mt-1">Cadastre servidores, restrições, casadinhas, polos bloqueados e períodos indisponíveis.</div>
+      </div>
+      <div class="tag">Controle</div>
+    </div>
+
+    <!-- Linha principal com campos principais -->
+    <div class="mt-4 grid grid-cols-3 gap-3 grid-3 items-end">
+      <div>
+        <label class="small">Nome</label>
+        <input id="srvNome" placeholder="Nome completo"/>
+      </div>
+      <div>
+        <label class="small">Máx. plantões</label>
+        <input id="srvMax" type="number" min="1" value="10"/>
+      </div>
+      <div>
+        <label class="small">Polos bloqueados</label>
+        <input id="srvPolosBloq" placeholder="Ex: Caruaru, Serra Talhada" style="min-width:220px"/>
+      </div>
+    </div>
+
+    <!-- restrições em linha -->
+    <div class="mt-3 flex items-center gap-6">
+      <label class="small flex items-center gap-2"><input id="srvNoSat" type="checkbox"/> Não aos sábados</label>
+      <label class="small flex items-center gap-2"><input id="srvCasadinha" type="checkbox"/> Casadinha (sab+dom)</label>
+    </div>
+
+    <!-- Bloco de indisponibilidades (agrupar em um só lugar) -->
+    <div class="mt-6 border-t pt-4">
+      <h3 class="font-semibold text-sm mb-2">Períodos de indisponibilidade</h3>
+      <div class="grid grid-cols-3 gap-3 items-end">
+        <div>
+          <label class="small">Início</label>
+          <input id="indispInicio" type="date"/>
+        </div>
+        <div>
+          <label class="small">Fim</label>
+          <input id="indispFim" type="date"/>
+        </div>
+        <div class="flex justify-start items-end">
+          <button id="btnAddIndisp" class="btn btn-ghost">Adicionar período</button>
+        </div>
+      </div>
+
+      <div class="mt-3">
+        <div class="small muted mb-1">Períodos adicionados:</div>
+        <div id="indispPreview" class="mt-2 space-y-2 small muted">Nenhum período adicionado</div>
+      </div>
+    </div>
+
+    <!-- Ações -->
+    <div class="mt-6 flex gap-2">
+      <button id="btnAddSrv" class="btn btn-primary">Salvar Servidor</button>
+    </div>
+
+    <!-- Tabela -->
+    <div class="mt-5 overflow-x-auto">
+      <table>
+        <thead><tr>
+          <th>Nome</th><th>Máx</th><th>Escalados</th><th>Casadinha</th><th>Não sáb.</th><th>Polos bloqueados</th><th>Indisponibilidades</th><th></th>
+        </tr></thead>
+        <tbody id="tableServidores"></tbody>
+      </table>
+    </div>
+  </section>  
+<!-- Polos -->
+  <section class="card mb-6">
+    <div class="flex items-start justify-between">
+      <div>
+        <h2 class="text-lg font-semibold">Polos e Plantões</h2>
+        <div class="muted mt-1">Cadastre polos, adicione datas (calendário + juiz) e visualize escalados.</div>
+      </div>
+      <div class="tag">Local</div>
+    </div>
+
+    <div class="mt-4 grid grid-cols-4 gap-3 grid-4 items-end">
+      <div>
+        <label class="small">Nome do Polo</label>
+        <input id="poloNome" placeholder="Ex: Polo Garanhuns"/>
+      </div>
+      <div>
+        <label class="small">Servidores/plantão</label>
+        <input id="poloQtd" type="number" min="1" value="1"/>
+      </div>
+      <div class="col-span-2 flex gap-2 justify-end">
+        <button id="btnAddPolo" class="btn btn-primary">Adicionar Polo</button>
+        <button id="btnClearPolos" class="btn btn-ghost">Limpar</button>
+      </div>
+    </div>
+
+    <div id="polosContainer" class="mt-5 space-y-3"></div>
+  </section>
+
+  <!-- Sorteio -->
+  <section class="card">
+    <div class="flex items-start justify-between">
+      <div>
+        <h2 class="text-lg font-semibold">Sorteio de Plantões</h2>
+        <div class="muted mt-1">Filtre por polo / dia / mês. O sorteio respeita indisponibilidades, sábados e polos bloqueados.</div>
+      </div>
+      <div class="tag">Sorteio</div>
+    </div>
+
+    <div class="mt-4 grid grid-cols-4 gap-3 items-end grid-4">
+      <div>
+        <label class="small">Polo</label>
+        <select id="selectPoloSort"><option value="todas">Todos</option></select>
+      </div>
+      <div>
+        <label class="small">Data</label>
+        <input id="inputSortDay" type="date"/>
+      </div>
+      <div>
+        <label class="small">Mês</label>
+        <input id="inputSortMonth" type="month"/>
+      </div>
+      <div class="flex gap-2">
+        <button id="btnSortDay" class="btn btn-primary">Sortear Dia</button>
+        <button id="btnSortMonth" class="btn btn-primary">Sortear Mês</button>
+      </div>
+    </div>
+
+    <div id="sortReport" class="mt-4 small muted"></div>
+  </section>
+</main>
+
+<!-- modal add/edit date -->
+<div id="modalAddDate" class="hidden fixed inset-0 z-50 items-center justify-center">
+  <div class="absolute inset-0" style="background:rgba(2,6,23,0.45)"></div>
+  <div class="relative bg-white w-full max-w-lg rounded-lg p-6 z-50">
+    <div class="flex justify-between items-center mb-4">
+      <h3 id="modalTitle" class="font-semibold">Adicionar / Editar Data</h3>
+      <button id="modalClose" class="btn btn-ghost">✕</button>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div><label class="small">Data</label><input id="modalDate" type="date"/></div>
+      <div><label class="small">Juiz</label><input id="modalJuiz" type="text" placeholder="Nome do juiz (opcional)"/></div>
+    </div>
+    <div class="mt-4 text-right">
+      <button id="modalCancel" class="btn btn-ghost">Cancelar</button>
+      <button id="modalSave" class="btn btn-primary">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- modal edit escala -->
+<div id="modalEditEscala" class="hidden fixed inset-0 z-50 items-center justify-center">
+  <div class="absolute inset-0" style="background:rgba(2,6,23,0.45)"></div>
+  <div class="relative bg-white w-full max-w-lg rounded-lg p-6 z-50">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="font-semibold">Editar Servidor Escalado</h3>
+      <button id="editEscalaClose" class="btn btn-ghost">✕</button>
+    </div>
+
+    <div>
+      <label class="small">Selecione o novo servidor</label>
+      <select id="editEscalaSelect" class="w-full mt-2"></select>
+    </div>
+
+    <div class="mt-4 text-right">
+      <button id="editEscalaCancel" class="btn btn-ghost">Cancelar</button>
+      <button id="editEscalaSave" class="btn btn-primary">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" style="position:fixed;right:20px;top:110px;z-index:60;display:flex;flex-direction:column;gap:8px"></div>
+
+<script>
+/* ====================================================
+   App state
+   ==================================================== */
+let localData = { polos: [], servidores: [], escalas: [] }; // polos: {nome, quantidade_por_plantao, datas:[{date,juiz}]}
+let modalMode = { type:'add', polo:null, oldDate:null };
+const $ = id => document.getElementById(id);
+let filtroMes = null;
+let pendingIndisps = [];
+
+/* ====================================================
+   Utilities
+   ==================================================== */
+function toast(msg,type='info',t=2200){
+  const el = document.createElement('div'); el.style.padding='10px 12px'; el.style.background='white'; el.style.border='1px solid rgba(2,6,23,0.06)'; el.style.borderRadius='8px'; el.style.boxShadow='0 8px 24px rgba(2,6,23,0.06)'; el.innerHTML = `<strong style="margin-right:8px">${type==='success'?'✔':''}</strong>${msg}`;
+  $('toasts').appendChild(el);
+  setTimeout(()=>{ el.style.opacity=0; setTimeout(()=>el.remove(),200); }, t);
+}
+function esc(s){ return s===undefined||s===null ? '' : String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+function formatBR(iso){ if(!iso) return ''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
+function escapeId(s){ return encodeURIComponent(String(s)).replace(/%/g,'_'); }
+
+/* ====================================================
+   Renderers
+   ==================================================== */
+function renderPolos(){
+  const cont = $('polosContainer'); cont.innerHTML='';
+  const sel = $('selectPoloSort'); sel.innerHTML = '<option value="todas">Todos</option>';
+  for(const polo of localData.polos){
+    const wrapper = document.createElement('div'); wrapper.className='card-compact'; wrapper.style.background='#fbfdff'; wrapper.style.border='1px solid #eef6ff'; wrapper.style.borderRadius='10px';
+    wrapper.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+        <div>
+          <div style="font-weight:600">${esc(polo.nome)}</div>
+          <div class="muted" style="margin-top:6px">Servidores/plantão: <strong>${polo.quantidade_por_plantao||1}</strong></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button data-action="add-date" data-polo="${esc(polo.nome)}" class="btn btn-ghost">+ Data</button>
+          <button data-action="del-polo" data-polo="${esc(polo.nome)}" class="btn btn-danger">Excluir</button>
+        </div>
+      </div>
+      <div id="dates-${escapeId(polo.nome)}" style="margin-top:12px"></div>
+    `;
+    cont.appendChild(wrapper);
+    const opt = document.createElement('option'); opt.value = polo.nome; opt.text = polo.nome; sel.appendChild(opt);
+
+    const datesEl = wrapper.querySelector(`#dates-${escapeId(polo.nome)}`);
+    const datas = (polo.datas||[]).slice().sort((a,b)=>a.date.localeCompare(b.date));
+    const datasFiltradas = filtroMes ? datas.filter(d=>d.date.slice(0,7)===filtroMes) : datas;
+    if(!datasFiltradas.length){
+      datesEl.innerHTML = `<div class="muted">Nenhuma data cadastrada${filtroMes ? ' para ' + filtroMes : ''}</div>`;
+    } else {
+      const list = document.createElement('div'); list.style.display='grid'; list.style.gap='8px';
+      for(const d of datasFiltradas){
+        const block = document.createElement('div'); block.style.display='flex'; block.style.justifyContent='space-between'; block.style.alignItems='flex-start'; block.style.background='white'; block.style.padding='10px'; block.style.border='1px solid #f1f5f9'; block.style.borderRadius='8px';
+        const escForThisDate = localData.escalas.filter(e=>e.polo===polo.nome && e.data===d.date);
+        // build serversHtml with edit button per servidor
+        const serversHtml = escForThisDate.length ? escForThisDate.map(s=>
+          `<div style="font-size:13px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+             <div style="flex:1">👤 ${esc(s.servidor)}</div>
+             <div style="flex:0"><button data-action="edit-scale" data-polo="${esc(polo.nome)}" data-date="${d.date}" data-servidor="${esc(s.servidor)}" class="small" style="color:#0f4f86">Trocar</button></div>
+          </div>`
+        ).join('') : `<div class="muted">Nenhum servidor escalado</div>`;
+
+        block.innerHTML = `<div style="min-width:220px"><div style="font-weight:600">${formatBR(d.date)}</div><div class="muted">${d.juiz? 'Juiz: '+esc(d.juiz) : '<em>Juiz não informado</em>'}</div>${serversHtml}</div>
+                           <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+                              <div class="muted">Vagas: <strong>${polo.quantidade_por_plantao||1}</strong></div>
+                              <div style="display:flex;gap:8px"><button data-action="edit-date" data-polo="${esc(polo.nome)}" data-date="${d.date}" class="small">Editar</button><button data-action="del-date" data-polo="${esc(polo.nome)}" data-date="${d.date}" class="small" style="color:#e11d48">Remover</button></div>
+                           </div>`;
+        list.appendChild(block);
+      }
+      datesEl.appendChild(list);
+    }
+  }
+}
+
+function renderServidores(){
+  const tbody = $('tableServidores'); tbody.innerHTML = '';
+  for(const s of localData.servidores){
+    const indisps = (s.indisponibilidades || []).map(p=>`${formatBR(p.start)} → ${formatBR(p.end)}`).join('; ') || '—';
+    const polosBloq = (s.restricoes && (s.restricoes.polos_bloqueados || [])).join(', ') || '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${esc(s.nome)}</td><td>${s.maximo_plantao||10}</td><td>${s.total_escalado||0}</td><td>${s.casadinha? 'Sim':'Não'}</td><td>${(s.restricoes && s.restricoes.sabado)?'Sim':'Não'}</td><td>${esc(polosBloq)}</td><td>${esc(indisps)}</td><td><button data-action="del-srv" data-nome="${esc(s.nome)}" class="btn btn-danger">Excluir</button></td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+/* ====================================================
+   Modal handling (add / edit date)
+   ==================================================== */
+function openModalAdd(polo){ modalMode = { type:'add', polo, oldDate: null }; $('modalTitle').textContent = `Adicionar Data — ${polo}`; $('modalDate').value = ''; $('modalJuiz').value = ''; $('modalAddDate').classList.remove('hidden'); $('modalAddDate').style.display='flex'; setTimeout(()=>$('modalDate').focus(),60); }
+function openModalEdit(polo, date){ modalMode = { type:'edit', polo, oldDate: date }; $('modalTitle').textContent = `Editar Data — ${polo}`; $('modalDate').value = date; const p = localData.polos.find(x=>x.nome===polo); const d = p && p.datas ? p.datas.find(x=>x.date===date) : null; $('modalJuiz').value = d ? (d.juiz||'') : ''; $('modalAddDate').classList.remove('hidden'); $('modalAddDate').style.display='flex'; setTimeout(()=>$('modalDate').focus(),60); }
+function closeModal(){ modalMode = { type:'add', polo:null, oldDate:null }; $('modalAddDate').classList.add('hidden'); $('modalAddDate').style.display='none'; }
+
+/* modal edit escala */
+function openEditEscalaModal(polo, date, servidorAtual){
+  const select = $('editEscalaSelect');
+  select.innerHTML = '';
+  // find elegiveis (exclude current server)
+  const elegiveis = localData.servidores.filter(s => s.nome !== servidorAtual && serverEligibleForDate(s, polo, date));
+  // if none, include servers that are eligible except max checks (show as option but disabled?) we'll allow only eligible
+  if(elegiveis.length === 0){
+    // try relaxed list: servers that are not currently assigned on that date but might be above monthly/total caps
+    const relaxed = localData.servidores.filter(s => s.nome !== servidorAtual && !localData.escalas.some(e=>e.data===date && e.servidor===s.nome));
+    relaxed.forEach(s=>{ const opt = document.createElement('option'); opt.value = s.nome; opt.textContent = s.nome + ' (verificar restrições)'; select.appendChild(opt); });
+  } else {
+    elegiveis.forEach(s=>{ const opt = document.createElement('option'); opt.value = s.nome; opt.textContent = s.nome; select.appendChild(opt); });
+  }
+
+  select.dataset.polo = polo;
+  select.dataset.date = date;
+  select.dataset.old = servidorAtual;
+
+  $('modalEditEscala').classList.remove('hidden');
+  $('modalEditEscala').style.display = 'flex';
+  setTimeout(()=>{ select.focus(); },60);
+}
+function closeEditEscalaModal(){ const m = $('modalEditEscala'); m.classList.add('hidden'); m.style.display='none'; }
+
+/* ====================================================
+   Delegated actions
+   ==================================================== */
+document.addEventListener('click', (ev)=>{
+  const btn = ev.target.closest('button'); if(!btn) return;
+  const action = btn.dataset.action;
+  if(action === 'add-date'){ openModalAdd(btn.dataset.polo); return; }
+  if(action === 'del-polo'){ const nome = btn.dataset.polo; if(!confirm('Excluir polo '+nome+'?')) return; localData.polos = localData.polos.filter(p=>p.nome!==nome); localData.escalas = localData.escalas.filter(e=>e.polo!==nome); recalcTotals(); renderPolos(); renderServidores(); toast('Polo removido','info'); return; }
+  if(action === 'edit-date'){ openModalEdit(btn.dataset.polo, btn.dataset.date); return; }
+  if(action === 'del-date'){ const polo = btn.dataset.polo, date = btn.dataset.date; if(!confirm(`Remover data ${date} em ${polo}?`)) return; const p = localData.polos.find(x=>x.nome===polo); if(p) p.datas = (p.datas||[]).filter(d=>d.date!==date); localData.escalas = localData.escalas.filter(e=> !(e.polo===polo && e.data===date) ); recalcTotals(); renderPolos(); renderServidores(); toast('Data removida','info'); return; }
+  if(action === 'del-srv'){ const nome = btn.dataset.nome; if(!confirm('Excluir servidor '+nome+'?')) return; localData.servidores = localData.servidores.filter(s=>s.nome!==nome); localData.escalas = localData.escalas.filter(e=>e.servidor!==nome); recalcTotals(); renderServidores(); renderPolos(); toast('Servidor removido','info'); return; }
+  if(action === 'edit-scale'){
+    const polo = btn.dataset.polo;
+    const date = btn.dataset.date;
+    const servidor = btn.dataset.servidor;
+    openEditEscalaModal(polo, date, servidor);
+    return;
+  }
+});
+
+/* modal controls */
+$('modalClose').addEventListener('click', closeModal);
+$('modalCancel').addEventListener('click', closeModal);
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') { closeModal(); closeEditEscalaModal(); } });
+
+$('modalSave').addEventListener('click', ()=>{
+  const date = $('modalDate').value; const juiz = $('modalJuiz').value.trim();
+  if(!date) { alert('Selecione uma data'); return; }
+  const poloName = modalMode.polo; const polo = localData.polos.find(p=>p.nome===poloName); if(!polo){ alert('Polo não encontrado'); closeModal(); return; }
+
+  if(modalMode.type === 'add'){
+    polo.datas = polo.datas || [];
+    if(polo.datas.some(x=>x.date === date)){ alert('Data já existe para esse polo'); return; }
+    polo.datas.push({ date, juiz: juiz || '' });
+    toast('Data adicionada', 'success');
+  } else if(modalMode.type === 'edit'){
+    const old = modalMode.oldDate;
+    if(old !== date && polo.datas.some(x=>x.date === date)){ alert('Já existe essa data'); return; }
+    const idx = (polo.datas||[]).findIndex(x=>x.date === old);
+    if(idx >= 0){
+      polo.datas[idx].date = date;
+      polo.datas[idx].juiz = juiz || '';
+      // atualizar escalas que apontavam para old date
+      localData.escalas.forEach(e=>{ if(e.polo===poloName && e.data===old) e.data = date; });
+      toast('Data atualizada', 'success');
+    }
+  }
+  recalcTotals(); renderPolos(); renderServidores(); closeModal();
+});
+
+/* modal edit escala controls */
+$('editEscalaClose').addEventListener('click', closeEditEscalaModal);
+$('editEscalaCancel').addEventListener('click', closeEditEscalaModal);
+$('editEscalaSave').addEventListener('click', () => {
+  const select = $('editEscalaSelect');
+  const polo = select.dataset.polo;
+  const date = select.dataset.date;
+  const oldServer = select.dataset.old;
+  const newServer = select.value;
+
+  if(!newServer){
+    alert('Nenhum servidor selecionado!');
+    return;
+  }
+
+  // remove o antigo (uma ocorrência) - caso haja duplicidade, remove apenas uma
+  let removed = false;
+  for(let i = localData.escalas.length - 1; i >= 0; i--){
+    const e = localData.escalas[i];
+    if(e.polo === polo && e.data === date && e.servidor === oldServer){
+      localData.escalas.splice(i,1);
+      removed = true;
+      break;
+    }
+  }
+
+  // adiciona o novo
+  localData.escalas.push({ data: date, polo, servidor: newServer, juiz: (localData.polos.find(p=>p.nome===polo)?.datas.find(dd=>dd.date===date)||{}).juiz || '' });
+
+  // recalc totals e render
+  recalcTotals(); renderPolos(); renderServidores();
+
+  closeEditEscalaModal();
+  toast('Escala atualizada com sucesso', 'success');
+});
+
+/* ====================================================
+   Add / Remove polos & servidores & indisponibilidades
+   ==================================================== */
+$('btnAddPolo').addEventListener('click', ()=>{
+  const nome = $('poloNome').value.trim(); if(!nome) return alert('Informe o nome do polo');
+  if(localData.polos.some(p=>p.nome===nome)) return alert('Polo já cadastrado');
+  const qtd = parseInt($('poloQtd').value) || 1;
+  localData.polos.push({ nome, quantidade_por_plantao: qtd, datas: [] });
+  $('poloNome').value=''; $('poloQtd').value='1';
+  renderPolos(); toast('Polo adicionado','success');
+});
+$('btnClearPolos').addEventListener('click', ()=>{ if(confirm('Limpar todos os polos?')){ localData.polos = []; localData.escalas = []; recalcTotals(); renderPolos(); renderServidores(); toast('Polos limpos','info'); } });
+
+/* Add indisponibilidade temporary store (before saving server) */
+function renderPendingIndisps(){
+  const preview = $('indispPreview'); preview.innerHTML = '';
+  if(!pendingIndisps.length){ preview.innerHTML = '<div class="muted">Nenhum período adicionado</div>'; return; }
+  pendingIndisps.forEach((p,idx)=>{
+    const el = document.createElement('div'); el.style.display='flex'; el.style.justifyContent='space-between'; el.style.alignItems='center';
+    el.innerHTML = `<div class="small">${formatBR(p.start)} → ${formatBR(p.end)}</div><div><button data-idx="${idx}" class="btn btn-ghost">Remover</button></div>`;
+    preview.appendChild(el);
+  });
+}
+
+/* remove pending period */
+document.addEventListener('click', (ev)=>{
+  const btn = ev.target.closest('button'); if(!btn) return;
+  if(btn.parentElement && btn.parentElement.id === 'indispPreview' && btn.dataset.idx !== undefined){
+    pendingIndisps.splice(parseInt(btn.dataset.idx),1); renderPendingIndisps();
+  }
+});
+
+$('btnAddIndisp').addEventListener('click', ()=>{
+  const start = $('indispInicio').value; const end = $('indispFim').value;
+  if(!start || !end) return alert('Selecione início e fim do período');
+  if(end < start) return alert('A data final deve ser igual ou posterior à inicial');
+  pendingIndisps.push({ start, end });
+  $('indispInicio').value=''; $('indispFim').value='';
+  renderPendingIndisps();
+});
+
+/* Save server */
+$('btnAddSrv').addEventListener('click', ()=>{
+  const nome = $('srvNome').value.trim(); if(!nome) return alert('Informe nome');
+  if(localData.servidores.some(s=>s.nome===nome)) return alert('Servidor já existe');
+  const max = parseInt($('srvMax').value) || 10;
+  const polosBloq = $('srvPolosBloq').value ? $('srvPolosBloq').value.split(',').map(x=>x.trim()).filter(x=>x) : [];
+  const noSab = $('srvNoSat').checked;
+  const cas = $('srvCasadinha').checked;
+  // clone pendingIndisps into server
+  const indispsForServer = pendingIndisps.map(p=>({ start: p.start, end: p.end }));
+  localData.servidores.push({
+    nome,
+    maximo_plantao: max,
+    periodo: { inicio:null, fim:null },
+    restricoes: { sabado: noSab, polos_bloqueados: polosBloq },
+    total_escalado: 0,
+    casadinha: cas,
+    indisponibilidades: indispsForServer
+  });
+  // reset input fields and pending list
+  $('srvNome').value=''; $('srvMax').value='10'; $('srvPolosBloq').value=''; $('srvNoSat').checked=false; $('srvCasadinha').checked=false;
+  pendingIndisps = []; renderPendingIndisps();
+  renderServidores(); toast('Servidor salvo','success');
+});
+
+/* ====================================================
+   Eligibility & Allocation logic (UTC saturday fix + indisponibilities + proportional quotas)
+   ==================================================== */
+function dateInAnyPeriod(dateISO, periods){
+  if(!periods || !periods.length) return false;
+  const dnum = dateISO;
+  for(const p of periods){
+    if(!p.start || !p.end) continue;
+    if(dnum >= p.start && dnum <= p.end) return true;
+  }
+  return false;
+}
+
+function serverEligibleForDate(s, poloName, dateISO){
+  // already assigned that day anywhere?
+  if(localData.escalas.some(e=>e.data === dateISO && e.servidor === s.nome)) return false;
+
+  // max overall check
+  if((s.total_escalado||0) >= (s.maximo_plantao || s.max || 10)) return false;
+
+  // polos bloqueados
+  const polosBloq = (s.restricoes && (s.restricoes.polos_bloqueados || s.restricoes.polosBloqueados)) || [];
+  if(Array.isArray(polosBloq) && polosBloq.includes(poloName)) return false;
+
+  // indisponibilidades periods
+  if(dateInAnyPeriod(dateISO, s.indisponibilidades || [])) return false;
+
+  // não aos sábados (UTC)
+  if(s.restricoes && s.restricoes.sabado === true){
+    const [y, m, d] = dateISO.split('-').map(Number);
+    const dow = new Date(Date.UTC(y, m-1, d)).getUTCDay(); // 0 Sun .. 6 Sat
+    if(dow === 6) return false;
+  }
+
+  // period availability (if set)
+  if(s.periodo && (s.periodo.inicio || s.periodo.fim)){
+    const mesData = dateISO.slice(0,7);
+    if(s.periodo.inicio && mesData < s.periodo.inicio) return false;
+    if(s.periodo.fim && mesData > s.periodo.fim) return false;
+  }
+
+  return true;
+}
+
+function recalcTotals(){
+  localData.servidores.forEach(s=>{ s.total_escalado = 0; });
+  for(const e of localData.escalas){
+    const s = localData.servidores.find(x=>x.nome === e.servidor);
+    if(s) s.total_escalado = (s.total_escalado||0) + 1;
+  }
+}
+
+/* weekend pairing attempt (sat->sun for casadinha) */
+function tryPairForWeekend(poloName, saturdayISO, sundayISO, neededForSunday){
+  if(!sundayISO) return 0;
+  const saturdayAssigned = localData.escalas.filter(e=>e.polo===poloName && e.data===saturdayISO).map(x=>x.servidor);
+  let assigned = 0;
+  for(const srvName of saturdayAssigned){
+    if(assigned >= neededForSunday) break;
+    const s = localData.servidores.find(x=>x.nome===srvName);
+    if(!s) continue;
+    if(!serverEligibleForDate(s, poloName, sundayISO)) continue;
+    localData.escalas.push({ data: sundayISO, polo: poloName, servidor: s.nome, juiz: (localData.polos.find(p=>p.nome===poloName)?.datas.find(dd=>dd.date===sundayISO)||{}).juiz || '' });
+    s.total_escalado = (s.total_escalado||0) + 1;
+    assigned++;
+  }
+  return assigned;
+}
+
+/* Sort day for a single polo */
+async function sortDayForPolo(poloName, dateISO){
+  const polo = localData.polos.find(p=>p.nome===poloName); if(!polo) return {assigned:0, skipped:0};
+  const existing = localData.escalas.filter(e=>e.polo===poloName && e.data===dateISO);
+  const needed = Math.max(0, (polo.quantidade_por_plantao||1) - existing.length);
+  if(needed <= 0) return {assigned:0, skipped:0};
+
+  // eligible pool
+  let pool = localData.servidores.filter(s => serverEligibleForDate(s, poloName, dateISO));
+  // shuffle
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+
+  // weekend preference for casadinha if saturday
+  const [y, m, d] = dateISO.split('-').map(Number);
+  const dow = new Date(Date.UTC(y, m-1, d)).getUTCDay();
+  if(dow === 6) pool.sort((a,b)=> (b.casadinha?1:0) - (a.casadinha?1:0));
+
+  let assigned=0, skipped=0;
+  for(let i=0;i<needed && pool.length>0;i++){
+    const chosen = pool.shift();
+    localData.escalas.push({ data: dateISO, polo: poloName, servidor: chosen.nome, juiz: (polo.datas.find(dd=>dd.date===dateISO)||{}).juiz || '' });
+    const sidx = localData.servidores.findIndex(x=>x.nome===chosen.nome);
+    if(sidx >= 0) localData.servidores[sidx].total_escalado = (localData.servidores[sidx].total_escalado||0) + 1;
+    assigned++;
+  }
+  if(pool.length === 0 && assigned < needed) skipped = needed - assigned;
+
+  // pair saturday->sunday if needed
+  if(dow === 6 && assigned > 0){
+    const sundayDateObj = new Date(Date.UTC(y, m-1, d)); sundayDateObj.setUTCDate(sundayDateObj.getUTCDate()+1);
+    const sundayISO = sundayDateObj.toISOString().slice(0,10);
+    if((polo.datas||[]).some(x=>x.date === sundayISO)){
+      const existingSun = localData.escalas.filter(e=>e.polo===poloName && e.data===sundayISO).length;
+      const neededSun = Math.max(0, (polo.quantidade_por_plantao||1) - existingSun);
+      if(neededSun > 0) tryPairForWeekend(poloName, dateISO, sundayISO, neededSun);
+    }
+  }
+
+  recalcTotals();
+  return {assigned, skipped};
+}
+
+/* Monthly proportional algorithm */
+function getMonthDatesForPolo(polo, monthISO){
+  const arr = (polo.datas||[]).filter(d=>d.date.slice(0,7) === monthISO).map(d=>d.date).sort();
+  let saturdays=0;
+  arr.forEach(dateISO=>{ const [y,m,d]=dateISO.split('-').map(Number); const dow = new Date(Date.UTC(y,m-1,d)).getUTCDay(); if(dow===6) saturdays++; });
+  return { dates: arr, totalDates: arr.length, saturdays };
+}
+
+async function sortMonthForPolo(poloName, monthISO){
+  const polo = localData.polos.find(p=>p.nome===poloName); if(!polo) return {assigned:0, skipped:0};
+  const stats = getMonthDatesForPolo(polo, monthISO);
+  if(stats.totalDates===0) return {assigned:0, skipped:0};
+
+  // compute per-server monthly quota based on availability in that month
+  const monthQuota = {};
+  for(const s of localData.servidores){
+    let availableCount = 0;
+    for(const dateISO of stats.dates){
+      if( (s.restricoes && (s.restricoes.polos_bloqueados || []).includes(poloName)) ) continue;
+      if(dateInAnyPeriod(dateISO, s.indisponibilidades || [])) continue;
+      const [y,m,d] = dateISO.split('-').map(Number);
+      const dow = new Date(Date.UTC(y,m-1,d)).getUTCDay();
+      if(s.restricoes && s.restricoes.sabado === true && dow === 6) continue;
+      availableCount++;
+    }
+    const ratio = stats.totalDates > 0 ? (availableCount / stats.totalDates) : 0;
+    const baseMax = s.maximo_plantao || s.max || 10;
+    const quota = Math.round(baseMax * ratio);
+    monthQuota[s.nome] = Math.max(0, Math.min(baseMax, quota));
+  }
+
+  let assignedTotal = 0, skippedTotal = 0;
+  const monthAssigned = {};
+  for(const dateISO of stats.dates){
+    const existing = localData.escalas.filter(e=>e.polo===poloName && e.data===dateISO);
+    const needed = Math.max(0, (polo.quantidade_por_plantao||1) - existing.length);
+    if(needed <= 0) continue;
+    let pool = localData.servidores.filter(s=>{
+      if(!serverEligibleForDate(s, poloName, dateISO)) return false;
+      const already = monthAssigned[s.nome] || 0;
+      if(already >= (monthQuota[s.nome] || 0)) return false;
+      if((s.total_escalado || 0) >= (s.maximo_plantao || s.max || 10)) return false;
+      return true;
+    });
+
+    // shuffle pool
+    for(let i=pool.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [pool[i],pool[j]]=[pool[j],pool[i]]; }
+
+    const [y,m,d] = dateISO.split('-').map(Number);
+    const dow = new Date(Date.UTC(y,m-1,d)).getUTCDay();
+    if(dow === 6) pool.sort((a,b)=> (b.casadinha?1:0) - (a.casadinha?1:0));
+
+    let assigned = 0;
+    for(let i=0;i<needed && pool.length>0;i++){
+      const chosen = pool.shift();
+      localData.escalas.push({ data: dateISO, polo: poloName, servidor: chosen.nome, juiz: (polo.datas.find(dd=>dd.date===dateISO)||{}).juiz || '' });
+      monthAssigned[chosen.nome] = (monthAssigned[chosen.nome] || 0) + 1;
+      const sidx = localData.servidores.findIndex(x=>x.nome===chosen.nome);
+      if(sidx >= 0) localData.servidores[sidx].total_escalado = (localData.servidores[sidx].total_escalado||0) + 1;
+      assigned++; assignedTotal++;
+    }
+    if(assigned < needed) skippedTotal += (needed - assigned);
+
+    if(dow === 6 && assigned > 0){
+      const sundayDateObj = new Date(Date.UTC(y,m-1,d)); sundayDateObj.setUTCDate(sundayDateObj.getUTCDate()+1);
+      const sundayISO = sundayDateObj.toISOString().slice(0,10);
+      if((polo.datas||[]).some(x=>x.date === sundayISO)){
+        const existingSun = localData.escalas.filter(e=>e.polo===poloName && e.data===sundayISO).length;
+        const neededSun = Math.max(0, (polo.quantidade_por_plantao||1) - existingSun);
+        if(neededSun > 0) tryPairForWeekend(poloName, dateISO, sundayISO, neededSun);
+      }
+    }
+  }
+
+  recalcTotals();
+  return {assigned: assignedTotal, skipped: skippedTotal};
+}
+
+async function sortMonthAll(monthISO){
+  const polos = localData.polos.filter(p=> (p.datas||[]).some(d=>d.date.slice(0,7) === monthISO) );
+  let at=0, sk=0;
+  for(const p of polos){ const res = await sortMonthForPolo(p.nome, monthISO); at+=res.assigned; sk+=res.skipped; }
+  return {assigned: at, skipped: sk};
+}
+
+/* ====================================================
+   Sort handlers
+   ==================================================== */
+$('btnSortDay').addEventListener('click', async ()=>{
+  if(pendingIndisps.length > 0){ if(!confirm('Existem períodos pendentes não salvos. Deseja continuar o sorteio sem salvar? (recomendado salvar servidores primeiro)')) return; }
+  const dateISO = $('inputSortDay').value; if(!dateISO) return alert('Escolha uma data');
+  const poloSel = $('selectPoloSort').value;
+  const polosToRun = (poloSel && poloSel!=='todas') ? [poloSel] : localData.polos.map(p=>p.nome);
+  let totalA=0, totalS=0;
+  for(const pol of polosToRun){
+    const p = localData.polos.find(x=>x.nome===pol); if(!p) continue;
+    if(!(p.datas||[]).some(d=>d.date===dateISO)) continue;
+    const r = await sortDayForPolo(pol, dateISO); totalA+=r.assigned; totalS+=r.skipped;
+  }
+  $('sortReport').textContent = `Sorteio do dia ${formatBR(dateISO)}: ${totalA} atribuídos${totalS? ', '+totalS+' sem elegíveis':''}`;
+  renderServidores(); renderPolos(); toast('Sorteio do dia concluído','success');
+});
+
+$('btnSortMonth').addEventListener('click', async ()=>{
+  if(pendingIndisps.length > 0){ if(!confirm('Existem períodos pendentes não salvos. Deseja continuar o sorteio sem salvar? (recomendado salvar servidores primeiro)')) return; }
+  const month = $('inputSortMonth').value; if(!month) return alert('Escolha um mês');
+  const poloSel = $('selectPoloSort').value;
+  let res;
+  if(poloSel && poloSel!=='todas') res = await sortMonthForPolo(poloSel, month);
+  else res = await sortMonthAll(month);
+  $('sortReport').textContent = `Sorteio do mês ${month}: ${res.assigned} atribuídos${res.skipped? ', '+res.skipped+' sem elegíveis':''}`;
+  renderServidores(); renderPolos(); toast('Sorteio do mês concluído','success');
+});
+
+/* ====================================================
+   Filter Mes/Ano (topo)
+   ==================================================== */
+$('filtroMesTopo').addEventListener('change', ()=>{
+  filtroMes = $('filtroMesTopo').value || null;
+  renderPolos();
+});
+$('btnTodosMeses').addEventListener('click', ()=>{
+  filtroMes = null; $('filtroMesTopo').value=''; renderPolos();
+});
+
+/* ====================================================
+   Export / Import XLSX (keep Import XLSX at top)
+   ==================================================== */
+$('btnExport').addEventListener('click', ()=>{
+  const wb = XLSX.utils.book_new();
+
+  // Polos
+  const polosExport = localData.polos.map(p=>({
+    'Polo': p.nome,
+    'Servidores por Plantão': p.quantidade_por_plantao || 1,
+    'Datas (JSON)': JSON.stringify(p.datas || [])
+  }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(polosExport), 'Polos');
+
+  // Servidores
+  const srvExport = localData.servidores.map(s=>({
+    'Nome': s.nome,
+    'Máx Plantões': s.maximo_plantao || s.max || 10,
+    'Casadinha': s.casadinha ? 'Sim' : 'Não',
+    'Não aos Sábados': (s.restricoes && s.restricoes.sabado) ? 'Sim' : 'Não',
+    'Polos Bloqueados': (s.restricoes && (s.restricoes.polos_bloqueados || s.restricoes.polosBloqueados)) ? ( (s.restricoes.polos_bloqueados || s.restricoes.polosBloqueados).join(', ') ) : '',
+    'Períodos Indisponíveis': (s.indisponibilidades || []).map(p=>`${p.start}→${p.end}`).join('; '),
+    'Escalados': s.total_escalado || 0
+  }));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(srvExport), 'Servidores');
+
+  // Escalas
+  const escExport = localData.escalas.map(e=>{
+    const p = localData.polos.find(x=>x.nome === e.polo);
+    let juiz = '';
+    if(p && p.datas){
+      const d = p.datas.find(x=>x.date === e.data);
+      if(d) juiz = d.juiz || '';
+    }
+    return { 'Data': e.data, 'Polo': e.polo, 'Servidor': e.servidor, 'Juiz Plantonista': juiz };
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(escExport), 'Escalas');
+
+  XLSX.writeFile(wb, 'Gestao_Escalas_Export.xlsx');
+  toast('Exportado XLSX', 'success');
+});
+
+$('btnImport').addEventListener('click', ()=>{
+  const inp = document.createElement('input'); inp.type='file'; inp.accept='.xlsx,.xls';
+  inp.onchange = (ev)=>{
+    const file = ev.target.files[0];
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, { type: 'array' });
+
+      // Polos
+      if(wb.SheetNames.includes('Polos')){
+        const arr = XLSX.utils.sheet_to_json(wb.Sheets['Polos'], { defval: null });
+        localData.polos = arr.map(r=>{
+          let datas = [];
+          try{ if(r['Datas (JSON)']) datas = JSON.parse(String(r['Datas (JSON)'])); }catch(err){}
+          return { nome: r['Polo'] || r['Nome'] || r.nome, quantidade_por_plantao: r['Servidores por Plantão'] || r.quantidade_por_plantao || 1, datas: datas || [] };
+        });
+      }
+
+      // Servidores
+      if(wb.SheetNames.includes('Servidores')){
+        const arr = XLSX.utils.sheet_to_json(wb.Sheets['Servidores'], { defval: null });
+        localData.servidores = arr.map(r=>{
+          let polosBloq = [];
+          try{ if(r['Polos Bloqueados']) polosBloq = String(r['Polos Bloqueados']).split(',').map(x=>x.trim()).filter(x=>x); }catch(e){}
+          // indisponibilidades parse
+          let indisps = [];
+          try{ if(r['Períodos Indisponíveis']) {
+            const raw = String(r['Períodos Indisponíveis']).split(';').map(x=>x.trim()).filter(x=>x);
+            raw.forEach(pair=>{
+              const [s,e] = pair.split('→').map(z=>z && z.trim());
+              if(s && e) indisps.push({ start: s, end: e });
+            });
+          }}catch(e){}
+          return {
+            nome: r['Nome'] || r.nome,
+            maximo_plantao: r['Máx Plantões'] || r.maximo_plantao || 10,
+            casadinha: String(r['Casadinha']||r.casadinha||'').toLowerCase().startsWith('s'),
+            restricoes: { sabado: String(r['Não aos Sábados']||'').toLowerCase().startsWith('s'), polos_bloqueados: polosBloq },
+            periodo: { inicio: r['Período Início'] || null, fim: r['Período Fim'] || null },
+            total_escalado: r['Escalados'] || 0,
+            indisponibilidades: indisps
+          };
+        });
+      }
+
+      // Escalas
+      if(wb.SheetNames.includes('Escalas')){
+        const arr = XLSX.utils.sheet_to_json(wb.Sheets['Escalas'], { defval: null });
+        localData.escalas = arr.map(r=>({ data: r['Data'] || r.data, polo: r['Polo'] || r.polo, servidor: r['Servidor'] || r.servidor, juiz: r['Juiz Plantonista'] || r.juiz || '' }));
+      }
+
+      recalcTotals(); renderPolos(); renderServidores();
+      toast('Importação concluída', 'success');
+    };
+    reader.readAsArrayBuffer(file);
+  };
+  inp.click();
+});
+
+/* ====================================================
+   Utility: initial render
+   ==================================================== */
+function init(){
+  pendingIndisps = [];
+  renderPendingIndisps();
+  recalcTotals();
+  renderPolos();
+  renderServidores();
+}
+init();
+
+</script>
+</body>
+</html>
